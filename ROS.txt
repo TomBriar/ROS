@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\begin{document}
+
+
+	After going through the birthday problem paper I noticed the goal of the K-list algorithm is to find elements
+	$y_{k_2}, \dots, y_{k_2+k_1}$ such that $s = y_{k_2} + \dots + y_{k_2+k_1} \in I(-1)$
+
+
+
+
+
+	% p
+	% Where s is an Element in our field Ii(-1) = [0,0]. The list that the K-list function returned was [91,51]. There is two problems with this result.
+	% 1.  91+51 != 0 which could mean that the problem is just not solvabel in our field
+	% 2. Or the result I need is l elements ie aux*0 ... aux*l and I cannot get this from 2^L which is 2^2 elements in the list.
+	% The solution to issue 2 would be if I made L = math.celi((lambdaParameter/(w+1))) instead of math.floor giving each list 2^3 elements instead of 2^2. But I still have problem 1 where 91 +51 + 5 + 13 mod 103 is is not contained in our field Ii(-1) = [0,0]. This again might be an issue of it not being solvable in our field of 103 or it could be our definition of Ii is off.
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
