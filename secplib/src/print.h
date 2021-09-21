@@ -93,8 +93,8 @@ void println_scalar(const secp256k1_scalar *s) {
 
 void printlnb(const unsigned char *msg) {
     int i;
-    printf("Print 34: ");
-    for (i = 0; i < 34; ++i) {
+    printf("Print 37: ");
+    for (i = 0; i < 37; ++i) {
         printf("%02x", msg[i]);
     }
     printf("\n");

@@ -90,6 +90,7 @@ def Ii(i):
 
 def convertBinary(binairyInt):
 	b = f'{int(binairyInt):{l}b}'
+	print(b)
 	B = []
 	for i in range(1, k2-1+2):
 		B.append(b[i-1:i])
@@ -198,8 +199,10 @@ def main():
 
 
 	spl = Cl - s
+	print(spl)
 	#Turn the hash into a binary string
 	B = convertBinary(spl)
+	print(B)
 
 	C = []
 	auxi = []

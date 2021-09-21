@@ -42,7 +42,7 @@ def padbytes(byteslist, length):
 	else:
 		return padbytes('0' + byteslist, length)
 
-def encode(R, m=0):
+def encode(R, m="null"):
 	xy = R.xy()
 	x = xy[0]
 	y = int(xy[1])
@@ -52,7 +52,7 @@ def encode(R, m=0):
 	else:
 		result += "02"
 	result += padbytes(str(hex(x))[2:],64)
-	if m > 0:
+	if m != "null":
 		result += padbytes(str(hex(m))[2:], 8)
 	# print("hex res: "+str(result))
 	result = bytes.fromhex(result)
@@ -78,29 +78,14 @@ def join(a, b, rangetup):
 	for i in range(0, len(a)):
 		for j in range(0, len(b)):
 			ab = a[i][1]+b[j][1]
-			print(a[i][1])
-			print(b[j][1])
-			print(ab)
-			return result
 			if (inRange(rangetup, ab)):
 				result.append((a[i][0]+b[j][0],ab,a[i][2]+b[j][2]))
-				# print("result "+str(i)+","+str(j)+" : "+str(ab));
 				if len(result) >= 62500:
 					return result
 	return result
 
 def Ii(i):
 	return (IntPrime(0)-int((Prime-1)/2^(((w-i)*L)+1)),int((Prime-1)/2^(((w-i)*L)+1)))
-
-def convertBinary(binairyInt):
-	b = f'{int(binairyInt):{k2}b}'
-	print("bbbb\n")
-	print(b)
-	B = []
-	for i in range(1, k2-1+2):
-		B.append(b[i-1:i])
-	B.reverse()
-	return B
 
 def kListHROS(w, L, R):
 	if (k1 <= 0):
@@ -110,16 +95,16 @@ def kListHROS(w, L, R):
 	for i in range(0, 2^w):#2^w
 		Li = []
 		for j in range(0, 2^L):
-			Li.append(([IntPrime(hash(encode(R[i], j)))],IntPrime(hash(encode(R[i], j))),[j]))
+			Li.append(([IntPrime(hash(encode(R[i], j)))],IntPrime(hash(encode(R[i], j))),[j],[i]))
 		Liw.append(Li)
 	Tree = [Liw]
-	##Collison ----
-	for x in range(0, 1): #w add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
+	#Collison ----
+	for x in range(0, w): #w add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
 		print("\n\nlevel "+str(x)+"\n")
 		FLi = []
 		level = w-x
 		TreeLevel = Tree[x]
-		for j in range(0, 1): #2^(level-1) add one because SUM is inclusive and end range is exclusive minus one because we are indexing from 0
+		for j in range(0, 2^(level-1)): #2^(level-1) add one because SUM is inclusive and end range is exclusive minus one because we are indexing from 0
 			print("j "+str(j))
 			FLi.append(join(TreeLevel[j*2],TreeLevel[2*j+1],Ii(level))) #minus one because lists are 1 indexed in the paper
 		Tree.append(FLi)
@@ -127,11 +112,8 @@ def kListHROS(w, L, R):
 	result = ([],0,[])
 	for i in range(0, len(finalTree)):
 		if inRange(Ii(-1), finalTree[i][1]):
-			print(finalTree[11])
-			print(i)
 			result = (finalTree[i][0], finalTree[i][1], finalTree[i][2])
 			break
-	print(result)
 	return result
 
 def main():			
@@ -142,6 +124,8 @@ def main():
 	S = []
 	CB = []
 	zero = []
+
+	midTerm = int((Prime-1)/2^((w+1)*L+1))
 
 	
 
@@ -165,19 +149,22 @@ def main():
 	# #Run the Pl function with the zero vector to get the 256th term of the hashes
 	def Pl(x, public=True):
 		#FT
-		result = 0
+		firstTerm = 0
 		for i in range(0, l):
 			if public:
 				a = x[i] - int(CB[i][0]) * G
 			else:
 				a = int(x[i]) - CB[i][0]
 			b = CB[i][1] - CB[i][0]
-			result += int(2^i / b) * a
+			firstTerm += int(2^i / b) * a
 		#ET
 		endTerm = 0
 		for i in range(k2, (k1+k2-1)+1):
 			endTerm += x[i]
-		result = result - endTerm
+		if public:
+			result = firstTerm - (midTerm * G) - endTerm
+		else:
+			result = firstTerm - midTerm - endTerm
 		return result
 
 	Rl = Pl(R) 
@@ -191,50 +178,56 @@ def main():
 	Cl = hash(encode(Rl, Ml))
 
 
-# # 	#Run the P256 function with the public nonses to get a public nonse with the 256 term added on after multiplyied by the public key
 	P = []
 	for i in range(0, k1+1):
 		P.append(R[k2+i])
-		# print("From R["+str(k2+i)+"]")
-		# print("P["+str(i)+"] = "+str(P[i]))
+	
 	(Y, s, auxk2l) = kListHROS(w, math.ceil(L), P)
-	print(Y)
+	print((Y, s, auxk2l))
+	# (Y, s, auxk2l) = ([17004682605251226819849180446852708922515198248892073397923374390071781022549, 26130863393903242419720772107128733902075693180970581293672575393758572380968, 45624902775286207932341799334384056500702994556045362449469755578573420715647, 25490272325236866211062696227568295714913761122269078215461270683185791976121, 46399031726664300308879141868585572227919547036319678292946848680449683861479, 25856315124517778247634310093047441656230297729211586745764979240773648226453, 10657913392129060447811763233352268233269190579091010331617463447963815783314, 34461208896339503760922815549545412367462188050699805969657157380289396861849, 93848140579913357012047045309384792206582707084979392919907342603333207383497, 5992656298750743423891036354240096598559211200421022088550379947781785270508, 10947225416206106201208619299060425843388977641434037603815491859455029097240, 5905225753180603410394115266685633557722733298311039442131408525100365910477, 114505021656651040266281669998733636511278373161320041362480749794878665123780, 52339679361712112752898677727632751893070318591992564674708298004873566087301, 101475104331289416340515385487533902505138525789418752424027116294203167555768, 78114291204680162790407765359475845675182535003382051183389471911240257166115], 115792088655130751228011868619772035051824430879383556482497868028341346951381, [0, 0, 0, 21, 0, 0, 18, 5, 0, 0, 0, 21, 11, 26, 24, 5])
+
+	print(Ii(-1))
 	print(s)
-	print(auxk2l)
-	# (Y, s, auxk2l) = ([69941745913993024878289062469584981154044959652311900484001576924908388893180, 83263816839295088418241218676773091670190011778897851081819221196682969152456, 32939841957761733810998997784021385361934449283920869019343613626449362165161, 46761562533733746409712510129618034103303502588343595035178103434787994211768, 10193257443427220008748011819294820376898484033327430779454263530044543700026, 21474956574749022368677494299888098823998107144015035567528335758131665740635, 26991046229603210612695046697705722848817518835826643690629629065199134014188, 55862874617168658219824003306036920909108080441850539912675591803508586782991, 82876111567929014239712505628285623128176817764835529086901644374046012283267, 69514645328365053659855233211655025662138173401026322581272487226396966809180, 32411837506304328099005025547027268691964605095957770325949979611691974080887, 47696966563113844976803973548755519944549381862025749710372505356901682884245, 89975383737043117386470344097867728182066292883578421223913012761261602122017, 64506279562824399252260117559625953913772113201605148033961503876138194467519, 101213146615715631735055963358423324948172501438914481323099427593804597033451, 90713241558379558014904737266474654900732930258758487641567348340433458604378], 650877088702686365331534891797167415432596540436826939348241840990653, [0, 0, 0, 5, 0, 0, 9, 4, 0, 1, 22, 29, 29, 8, 30, 11])
+	print((s + midTerm))
+	spl = ((s + midTerm) % Prime)
+	# print(spl)
+	# spl = 99600189832072849215620074068403480855997703448124550731933793448594721743679
+	print(spl)
+	b = f'{int(spl):{l}b}'
+	print(b)
+	B = []
+	for i in range(1, k2-1+2):
+		B.append(b[i-1:i])
+	B.reverse()
+	B = [0 if i == ' ' else i for i in B]
+	print(B)
+
+	C = []
+	auxi = []
+	for i in range(0,k2):
+		C.append(CB[i][int(B[i])])
+
+	for i in range(k2, l):
+		C.append(Y[k2-i])
+	if (k2 < l):
+		Cl = Y[k2-l]
+
+	for i in range(0, l):
+		si = K[i] + IntPrime(PrivKey) * IntPrime(C[i])
+		S.append(si)
 
 
-	# spl = s + int((Prime-1)/2^(((w+1)*L)+1))
-	# B = convertBinary(spl)
-
-	# C = []
-	# auxi = []
-	# for i in range(0,k2):
-	# 	C.append(CB[i][int(B[i])])
-	# 	auxi.append(B[i])
-
-	# for i in range(k2, l):
-	# 	C.append(Y[k2-i])
-	# if (k2 < l):
-	# 	Cl = Y[k2-l]
-	# else:
-
-	# for i in range(0, l):
-	# 	si = K[i] + IntPrime(PrivKey) * IntPrime(C[i])
-	# 	S.append(si)
+	Sl = Pl(S, False)
+	print(Sl)
 
 
-	# Sl = Pl(S, False)
-	# print(Sl)
+	for i in range(0,l):
+		print(((int(S[i]) * G) - (int(C[i]) * PubKey)) == R[i])
+	print(((int(Sl) * G) - (int(Cl) * PubKey)) == Rl)
 
 
-	# for i in range(0,l):
-	# 	print(((int(S[i]) * G) - (int(C[i]) * PubKey)) == R[i])
-	# print(((int(Sl) * G) - (int(Cl) * PubKey)) == Rl)
-
-
-	# print("Rl "+str(Rl))
-	# print("int(Sl) * G - int(Cl) * PubKey "+str(int(Sl) * G - int(Cl) * PubKey))
+	print("Rl "+str(Rl))
+	print("int(Sl) * G - int(Cl) * PubKey "+str(int(Sl) * G - int(Cl) * PubKey))
 
 
 print(main())

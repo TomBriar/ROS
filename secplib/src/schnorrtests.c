@@ -8,7 +8,7 @@ int lambdaParameter, wvar, L, k1, k2, l, memoryLimit, powerW, powerL, sqrtMemLim
 typedef struct {
     secp256k1_gej R;
     secp256k1_scalar hash;
-    int aux;
+    unsigned int aux;
     int iteration;
 } hash_value;
 
@@ -26,7 +26,9 @@ int s_get_int(secp256k1_scalar *a) {
     return secp256k1_scalar_get_bits_var(a, 0, 31);;
 }
 
-int encode(unsigned char out[34], secp256k1_gej *R) {
+int encode(unsigned char out[37], secp256k1_gej *R, unsigned int msg) {
+    uint32_t d;
+    d = msg;
     int odd, iter;
     unsigned char data[32];
     secp256k1_fe copy, copyy;
@@ -44,6 +46,14 @@ int encode(unsigned char out[34], secp256k1_gej *R) {
     }
     for (iter = 1;iter < 33; iter++) {
         out[iter] = data[iter-1];
+    }
+    for (iter = 3; iter > -1; iter--) {
+        unsigned char bit;
+        int trueiter;
+        bit = d >> (iter * 8);
+        trueiter = 33 + (3 - iter);
+        // printf("%02x", bit);
+        out[trueiter] = bit;
     }
     return 1;
 }
@@ -208,28 +218,19 @@ static void scalar_hash(secp256k1_scalar *out, unsigned char *data, int len) {
     secp256k1_scalar_set_b32(out, out32, &overflow);
 }
 
-static void hash_point(secp256k1_scalar *out, unsigned char *data, unsigned int msg) {
+static void hash_point(secp256k1_scalar *out, unsigned char *data) {
     secp256k1_sha256 hash;
     int iter, overflow;
-    uint32_t d;
     unsigned char out32[32];
     secp256k1_sha256_initialize(&hash);
     // printf("%u msg\n", msg);
     // printf("data: ");
-    for (iter = 0; iter < 33; iter++) {
+    for (iter = 0; iter < 37; iter++) {
         unsigned char bit;
         bit = data[iter];
         // printf("%02x", bit);
         secp256k1_sha256_write(&hash, &bit, sizeof(char));
     }
-    d = msg;
-    for (iter = 3; iter > -1; iter--) {
-        unsigned char bit;
-        bit = d >> (iter * 8);
-        // printf("%02x", bit);
-        secp256k1_sha256_write(&hash, &bit, sizeof(char));
-    }
-    // printf("\n");
     secp256k1_sha256_finalize(&hash, out32);
     overflow = 0;
     secp256k1_scalar_set_b32(out, out32, &overflow);
@@ -270,10 +271,6 @@ int join(klistleaf *branchres, int *treelen, klistleaf *branch1, klistleaf *bran
         for (iter2 = 0; iter2 < len2; iter2++) {
             secp256k1_scalar ab;
             s_add(&ab, &branch1[iter].currenthash, &branch2[iter2].currenthash);
-            println_scalar(&ab);
-            println_scalar(&branch1[iter].currenthash);
-            println_scalar(&branch2[iter2].currenthash);
-            return 1;
             if (s_in_range(&min, &max, &ab)) {
                 klistleaf newleaf;
                 int newleafhasheslen, iter3, iter4;
@@ -314,32 +311,42 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
     Treelen = malloc(wvar * sizeof(int *));
     Treelen[0] = malloc(powerW * sizeof(int));
     for (iter = 0; iter < powerW; iter++) {
+        klistleaf sizeleaf;
+        sizeleaf.hashes =  malloc(powerW * sizeof(hash_value));
         Tree[0][iter] = malloc(powerL * sizeof(klistleaf));
         Treelen[0][iter] = powerL;
         for (iter2 = 0; iter2 < powerL; iter2++) {
-            unsigned char encodeR[33];
+            unsigned char encodeR[37];
             secp256k1_scalar hashres;
             hash_value hashvalue;
             klistleaf leaf;
-            encode(encodeR, &R[iter]);
-            hash_point(&hashres, encodeR, iter2);
+            encode(encodeR, &R[iter], iter2);
+            // printf("encodeR = ");
+            // printf("%02x", encodeR[0]);
+            // printf("%02x", encodeR[37]);
+            // printf("\n");
+            hash_point(&hashres, encodeR);
+            // printf("hash = ");
+            // println_scalar(&hashres);
             hashvalue.R = R[iter];
             hashvalue.hash = hashres;
             hashvalue.aux = iter2;
             hashvalue.iteration = iter;
-            leaf.hashes = malloc(1 * sizeof(hash_value));
+            leaf.hashes = malloc(powerW * sizeof(hash_value));
             leaf.hashes[0] = hashvalue;
             leaf.hasheslen = 1;
             leaf.currenthash = hashres;
             Tree[0][iter][iter2] = leaf; 
-            printf("\naux = %d\n", iter2);
-            println_gej_ge(&R[iter]);
-            println_scalar(&hashres);
+            // printf("\niter = %d\n", iter);
+            // printf("aux = %d\n", iter2);
+            // // println_gej_ge(&R[iter]);
+            // printf("hash = ");
+            // println_scalar(&hashres);
         }
     }
 
     newlistlen = powerW;
-    for (x = 0; x < 1; x++) { //wvar
+    for (x = 0; x < wvar; x++) { //wvar
         int levelpow;
         printf("Level %d\n\n\n\n", x);
         level = wvar-x;
@@ -347,7 +354,7 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
         Tree[x+1] = malloc(newlistlen * sizeof(klistleaf *));
         Treelen[x+1] = malloc(newlistlen * sizeof(int));
         levelpow = pow(2, level-1);
-        for (j = 0; j < 1; j++) { //newlistlen
+        for (j = 0; j < newlistlen; j++) { //newlistlen
             int treeLenMax;
             printf("j = %d\n\n", j);
             if (Treelen[x][j*2] >= sqrtMemLimit || Treelen[x][j*2+1] >= sqrtMemLimit) {
@@ -356,18 +363,30 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
                 treeLenMax = Treelen[x][j*2]*Treelen[x][j*2+1];
             }
             Tree[x+1][j] = malloc((treeLenMax)*sizeof(klistleaf));
+            // println_scalar(&Tree[x][j*2][0].currenthash);
+            // println_gej_ge(&Tree[x][j*2][0].hashes[0].R);
+            // println_scalar(&Tree[x][j*2][0].hashes[0].hash);
+            // printf("aux %u\n", Tree[x][j*2][0].hashes[0].aux);
+            // printf("itteration %d\n", Tree[x][j*2][0].hashes[0].iteration);
+            // unsigned char encodeR[37];
+            // secp256k1_scalar hashres;
+            // encode(encodeR, &Tree[x][j*2][0].hashes[0].R, Tree[x][j*2][0].hashes[0].aux);
+            // printlnb(&encodeR);
+            // println_scalar(&hashres);
+            // println_scalar(&Tree[x][j*2+1][0].currenthash);
             join(Tree[x+1][j], &Treelen[x+1][j], Tree[x][j*2], Tree[x][j*2+1], Treelen[x][j*2], Treelen[x][j*2+1], level);
+            printf("tree len %d\n", Tree[x+1][j]);
         }
     }
-    // for (iter = 0; iter < Treelen[wvar][0]; iter++) {
-    //     secp256k1_scalar min, max;
-    //     Ii(&min, &max, -1);
-    //     if (s_in_range(&min, &max, &Tree[wvar][0][iter].currenthash)) {
-    //         printf("VALUEE: %d\n", iter);
-    //         *klistresult = Tree[wvar][0][iter];
-    //         return 1;
-    //     }
-    // }
+    for (iter = 0; iter < Treelen[wvar][0]; iter++) {
+        secp256k1_scalar min, max;
+        Ii(&min, &max, -1);
+        if (s_in_range(&min, &max, &Tree[wvar][0][iter].currenthash)) {
+            printf("VALUEE: %d\n", iter);
+            *klistresult = Tree[wvar][0][iter];
+            return 1;
+        }
+    }
     printf("ERROR with klist algo");
     return 0;
 }
@@ -381,7 +400,7 @@ int schnorr(secp256k1_context ctx) {
     hash_value c0, c1, **CB, Cl, *C;
     int iter, iter2, power, bit;
     unsigned int **MB, randomint, m1, m0, Ml, *bits, *aux;
-    unsigned char encodeR[33];
+    unsigned char encodeR[37];
     secp256k1_gej pubKey, r, *R, *P, Rl, firstTerm, endTerm, pllG;
     klistleaf klistresult;
 
@@ -418,6 +437,19 @@ int schnorr(secp256k1_context ctx) {
     MB = malloc(l*sizeof(unsigned int *));
     CB = malloc(l*sizeof(secp256k1_scalar *));
 
+    // randomint = secp256k1_testrand32();
+    // secp256k1_scalar_set_int(&k, randomint);
+    // secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &r, &k);
+    // unsigned int msg = 10;
+    // encode(&encodeR, &r, msg);
+    // printf("print hex: ");
+    // for (iter = 0; iter < 37; iter++) {
+    //     printf("%02x", encodeR[iter]);
+    // }
+    // printf("\n");
+
+
+
     /* get random k's and r's */
     for (iter = 0; iter < l; iter++) {
         MB[iter] = malloc(2*sizeof(unsigned int));
@@ -432,18 +464,19 @@ int schnorr(secp256k1_context ctx) {
         // println_gej_ge(&r);
         m0 = secp256k1_testrand32();
         m1 = secp256k1_testrand32();
-        encode(encodeR, &r);
+        encode(encodeR, &r, m0);
         c0.R = r;
         c1.R = r;
         c0.aux = m0;
         c0.iteration = iter;
-        hash_point(&c0.hash, encodeR, m0);
+        hash_point(&c0.hash, encodeR);
         // printlnb(&encodeR);
         // printf("%d,\n",m0);
         // println_scalar(&c0.hash);
+        encode(encodeR, &r, m1);
         c1.aux = m1;
         c1.iteration = iter;
-        hash_point(&c1.hash, encodeR, m1);
+        hash_point(&c1.hash, encodeR);
         MB[iter][0] = m0;
         MB[iter][1] = m1;
         CB[iter][0] = c0;
@@ -508,46 +541,53 @@ int schnorr(secp256k1_context ctx) {
 
     /* Assign Cl*/
     Ml = secp256k1_testrand32();
-    encode(encodeR, &Rl);
+    encode(encodeR, &Rl, Ml);
     Cl.R = Rl;
     Cl.aux = Ml;
     Cl.iteration = l+1;
-    hash_point(&Cl.hash, encodeR, Ml);
+    hash_point(&Cl.hash, encodeR);
 
     /* Call Klist */
 
     s_set_int(&s, 0);
     if (k1 > 0) {
-        klisthros(&klistresult, P);
-        printf("klistresult\n");
-        // println_scalar(&Cl.hash);
-        // println_scalar(&klistresult.currenthash);
         // for (iter = 0; iter < powerW; iter++) {
-        //     printf("aux%d = %u\n", iter, klistresult.hashes[iter].aux);
-        //     printf("hash%d: ", iter);
-        //     println_scalar(&klistresult.hashes[iter].hash);
+        //     printf("iter%d = ", iter);
+        //     println_gej_ge(&P[iter]);
         // }
 
-        // /* Offset s */ 
-        // power = (wvar+1)*L+1;
-        // s_subtract_int(&Primem1, &Prime, 1);
-        // s_set_int(&powersc, power);
-        // for (s_set_int(&itersc, 0); s_comp(&itersc, &powersc, 1, 0); s_add_int_eq(&itersc, 2)) {
-        //     secp256k1_scalar_shr_int(&Primem1, 1);
-        // }
-        // s_add(&s, &klistresult.currenthash, &Primem1);
+        klisthros(&klistresult, P);
+        printf("klistresult\n");
+        println_scalar(&Cl.hash);
+        println_scalar(&klistresult.currenthash);
+        for (iter = 0; iter < powerW; iter++) {
+            printf("aux%d = %u\n", iter, klistresult.hashes[iter].aux);
+            printf("hash%d: ", iter);
+            println_scalar(&klistresult.hashes[iter].hash);
+        }
+
+        /* Offset s */ 
+        power = (wvar+1)*L+1;
+        s_subtract_int(&Primem1, &Prime, 1);
+        s_set_int(&powersc, power);
+        for (s_set_int(&itersc, 0); s_comp(&itersc, &powersc, 1, 0); s_add_int_eq(&itersc, 1)) {
+            secp256k1_scalar_shr_int(&Primem1, 1);
+        }
+        s_add(&s, &klistresult.currenthash, &Primem1);
     }
+
 
 
     
 
-    // /* Convert s to binary */
-    // bits = malloc(l*sizeof(unsigned int));
-    // s_subtract(&s, &Cl.hash, &s);
-    // for (iter = 0; iter < 256; iter++) {
-    //     bit = secp256k1_scalar_get_bits(&s, iter, 1); 
-    //     bits[iter] = bit;
-    // }
+    /* Convert s to binary */
+    bits = malloc(l*sizeof(unsigned int));
+    printf("binary: ");
+    for (iter = 0; iter < 256; iter++) {
+        bit = secp256k1_scalar_get_bits(&s, iter, 1); 
+        printf("%d", bit);
+        bits[iter] = bit;
+    }
 
     // /* Assign correct aux and Cs */
     // aux = malloc(l+1*sizeof(unsigned int));
