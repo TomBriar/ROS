@@ -3,8 +3,8 @@ import hashlib
 import math
 
 
-def hash(hexlist, aux="aux321"):
-	return IntPrime(int(hashlib.sha256(bytes(hexlist, "ascii")+bytes(str(aux), "ascii")).hexdigest(), 16))
+def hash(byteslist):
+	return IntPrime(int(hashlib.sha256(byteslist).hexdigest(), 16))
 
 def countBits(number):
     return math.ceil((math.log(number) /
@@ -16,7 +16,6 @@ C = EllipticCurve ([F (0), F (7)])
 #y^2 = x^3 + 0*x + 7 this curve
 G = -C.lift_x(0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798) 
 Prime = G.order()
-print(Prime)
 IntPrime = FiniteField(Prime)
 
 
@@ -25,7 +24,7 @@ lambdaParameter = countBits(Prime)
 PrivKey = 3943403887
 PubKey = int(PrivKey) * G
 
-w = 3
+w = 4
 L =	5
 k1 = 2^w-1 
 k2 = max(0, math.ceil(lambdaParameter - (w + 1) * L)) # 0
@@ -43,22 +42,6 @@ def padbytes(byteslist, length):
 	else:
 		return padbytes('0' + byteslist, length)
 
-def padzero(binary, length):
-	if (len(binary) >= length):
-		return binary
-	binary.insert(0,'0')
-	return padzero(binary, length)
-
-def convertBinary(binaryInt):
-	print("start convert Binary")
-	print(binaryInt)
-	b = list(str(bin(binaryInt))[2:])
-	print(b)
-	B = padzero(b, k2)
-	B.reverse()
-	print(B)
-	return B
-
 def encode(R, m="null"):
 	xy = R.xy()
 	x = xy[0]
@@ -72,6 +55,7 @@ def encode(R, m="null"):
 	if m != "null":
 		result += padbytes(str(hex(m))[2:], 8)
 	# print("hex res: "+str(result))
+	result = bytes.fromhex(result)
 	return result
 
 def randomElement(Field):
@@ -89,61 +73,47 @@ def inRange(rangetup, hashval):
 			return True
 	return False
 
-def join(a, b, level):
-	print("RUn join")
-	print(len(a))
-	print(len(b))
+def join(a, b, rangetup):
 	result = []
 	for i in range(0, len(a)):
 		for j in range(0, len(b)):
-			ab = a[i][1]+b[j][1]  #todo modlus
-			if (inRange(Ii(level), ab)):
+			ab = a[i][1]+b[j][1]
+			if (inRange(rangetup, ab)):
 				result.append((a[i][0]+b[j][0],ab,a[i][2]+b[j][2]))
-				currentY = a[i][0]+b[j][0]
-				sumY = 0
-				for x in range(0, len(currentY)):
-					sumY += currentY[x]
-				assert(sumY == ab)
-				if (len(result) >= 1024): 
+				if len(result) >= 62500:
 					return result
 	return result
 
 def Ii(i):
-	return (IntPrime(0)-int((Prime-1)/2^(((w-i)*L)+1)),IntPrime(int((Prime-1)/2^(((w-i)*L)+1))))
+	return (IntPrime(0)-int((Prime-1)/2^(((w-i)*L)+1)),int((Prime-1)/2^(((w-i)*L)+1)))
 
-def kListHROS(w, L, P):
+def kListHROS(w, L, R):
+	if (k1 <= 0):
+		return ([],0,[])
 	#Setup ----
-	print("start setup")
-	aux = []
-	for i in range(0, 2^L):
-		aux.append(i)
-	print(aux)
 	Liw = []
-	for i in range(0, len(P)):
-		print("p"+str(i))
+	for i in range(0, 2^w):#2^w
 		Li = []
-		for j in range(0, len(aux)):
-			Li.append(([IntPrime(hash(encode(P[i]), aux[j]))],IntPrime(hash(encode(P[i]), aux[j])),[aux[j]]))
+		for j in range(0, 2^L):
+			Li.append(([IntPrime(hash(encode(R[i], j)))],IntPrime(hash(encode(R[i], j))),[j],[i]))
 		Liw.append(Li)
 	Tree = [Liw]
-	##Collison ----
-	for x in range(0, w): #add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
-		print("level: "+str(x))
+	#Collison ----
+	for x in range(0, w): #w add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
+		print("\n\nlevel "+str(x)+"\n")
 		FLi = []
 		level = w-x
 		TreeLevel = Tree[x]
-		for j in range(0, 2^(level-1)): #add one because SUM is inclusive and end range is exclusive minus one because we are indexing from 0
-			print("j"+(str(j)))
-			FLi.append(join(TreeLevel[j*2],TreeLevel[2*j+1],level)) #minus one because lists are 1 indexed in the paper
+		for j in range(0, 2^(level-1)): #2^(level-1) add one because SUM is inclusive and end range is exclusive minus one because we are indexing from 0
+			print("j "+str(j))
+			FLi.append(join(TreeLevel[j*2],TreeLevel[2*j+1],Ii(level))) #minus one because lists are 1 indexed in the paper
 		Tree.append(FLi)
-		
 	finalTree = Tree[w][0]
-	result = []
+	result = ([],0,[])
 	for i in range(0, len(finalTree)):
 		if inRange(Ii(-1), finalTree[i][1]):
 			result = (finalTree[i][0], finalTree[i][1], finalTree[i][2])
 			break
-		result = ([],0,[])
 	return result
 
 def main():			
@@ -171,8 +141,8 @@ def main():
 	for i in range(0, l):
 		r = int(K[i]) * G
 		R.append(r)
-		c0 = hash(encode(r), M[i][0])
-		c1 = hash(encode(r), M[i][1])
+		c0 = hash(encode(r, M[i][0]))
+		c1 = hash(encode(r, M[i][1]))
 		CB.append([c0, c1])
 
 	#DEFINE PL
@@ -205,20 +175,24 @@ def main():
 
 	#GENERATE ML AND CL WITH RL
 	Ml = 335298040
-	Cl = hash(encode(Rl), Ml)
+	Cl = hash(encode(Rl, Ml))
 
-
-	P2 = []
-	for i in range(0, 2^w):
-		P2.append(R[k2+i])
-
+	#SELECT THE R's for klist
+	P = []
+	for i in range(0, k1):
+		P.append(R[k2+i])
+	P.append(Rl)
+	
 	#RUN KLIST
-	(Y, s, auxk2l) = kListHROS(w, math.ceil(L), R)
-	print(Y)
+	(Y, s, auxk2l) = kListHROS(w, math.ceil(L), P)
 
 	#CONVERT ??? INTO BINARY FOR 0-k2 C's
-	smt = s + midTerm
-	B = convertBinary(smt)
+	spl = ((s + midTerm) % Prime)
+	b = f'{int(spl):{l}b}'
+	B = []
+	for i in range(1, k2-1+2):
+		B.append(b[i-1:i])
+	B.reverse()
 
 	#CHOOSE C's
 	C = []
@@ -227,11 +201,13 @@ def main():
 
 	#APPEND Y's from KLIST
 	for i in range(k2, l):
-		C.append(Y[i])
+		C.append(Y[k2-i])
 
-	#IF Klist was used CL = Yl
+	#IF Klist was used CL = Y[k2-l]
 	if (k2 < l):
-		Cl = Y[l]
+		Cl = Y[k2-l]
+	print(Y)
+	print(Y[k2-l])
 
 	#RUN SIGN0 for 0-l SIGS WITH C's
 	for i in range(0, l):
@@ -242,8 +218,8 @@ def main():
 	Sl = Pl(S, False)
 
 
-	for i in range(0,l):
-		print(((int(S[i]) * G) - (int(C[i]) * PubKey)) == R[i])
+	# for i in range(0,l):
+	# 	print(((int(S[i]) * G) - (int(C[i]) * PubKey)) == R[i])
 	print(((int(Sl) * G) - (int(Cl) * PubKey)) == Rl)
 
 
