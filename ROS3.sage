@@ -168,6 +168,7 @@ def kListHROS(w, L, P):
 		Tree.append(FLi)
 		
 	finalTree = Tree[w][0]
+	print(len(finalTree))
 	result = []
 	for i in range(0, len(finalTree)):
 		if inRange(Ii(-1), finalTree[i][1]):

@@ -162,10 +162,6 @@ def kListHROS(w, L, P):
 		Liw.append(Li)
 	Tree = [Liw]
 
-	sourceFile = open('demo.txt', 'w')
-	print(Tree, file = sourceFile)
-	sourceFile.close()
-
 	##Collison ----
 	for x in range(_sage_const_0 , w): #add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
 		print("level: "+str(x))
@@ -178,6 +174,7 @@ def kListHROS(w, L, P):
 		Tree.append(FLi)
 		
 	finalTree = Tree[w][_sage_const_0 ]
+	print(len(finalTree))
 	result = []
 	for i in range(_sage_const_0 , len(finalTree)):
 		if inRange(Ii(-_sage_const_1 ), finalTree[i][_sage_const_1 ]):
@@ -248,9 +245,6 @@ for i in range(k2, l):
 	sumY += y[i-k2]
 
 assert(sumB == sumXp)
-print(sumB)
-print("".join(B))
-print(s)
 assert(sumB == s+mt)
 
 print("1 = "+str(int(Pl(C))))
@@ -286,13 +280,6 @@ print(Ii(-_sage_const_1 ))
 #newCl - (s-mt)= 67335039924468768217097231514108883073644323865494264907329786431989689444655
 #newCl - (s+mt)= 67335039924363455925428674327410965045960653433175763095979757389709281957584
 		
-                     # 55213970774324510299478046898216203619402677669084026519110280581244545
-                
-
-                # 115792034023345421099060685530641009636633944876397235298578644031237580249792
-
-
-
 
 
 

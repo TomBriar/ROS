@@ -1,0 +1,14 @@
+def PlR(x):
+	Plcoeffs = []
+	xP = []
+	firstTerm = 0
+	for i in range(0, l):
+		a = x[i] - int(CB[i][0]) * G
+		b = CB[i][1] - CB[i][0]
+		firstTerm += int(2^i / b) * a
+	#ET
+	endTerm = 0
+	for i in range(k2, (k1+k2-1)+1):
+		endTerm += x[i]
+	result = firstTerm - (mt * G) - endTerm
+	return result

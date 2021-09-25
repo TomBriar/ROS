@@ -59,20 +59,7 @@ def convertBinary(binaryInt):
 	print(B)
 	return B
 
-def encode(R, m="null"):
-	xy = R.xy()
-	x = xy[0]
-	y = int(xy[1])
-	result = ""
-	if y % 2:
-		result += "03"
-	else:
-		result += "02"
-	result += padbytes(str(hex(x))[2:],64)
-	if m != "null":
-		result += padbytes(str(hex(m))[2:], 8)
-	# print("hex res: "+str(result))
-	return result
+
 
 def randomElement(Field):
 	while True:
@@ -126,6 +113,7 @@ def kListHROS(w, L, P):
 			Li.append(([IntPrime(hash(encode(P[i]), aux[j]))],IntPrime(hash(encode(P[i]), aux[j])),[aux[j]]))
 		Liw.append(Li)
 	Tree = [Liw]
+
 	##Collison ----
 	for x in range(0, w): #add one because SUM is inclusive and end range is exclusive minus one because the range should be 1 - w
 		print("level: "+str(x))
@@ -213,7 +201,7 @@ def main():
 		P2.append(R[k2+i])
 
 	#RUN KLIST
-	(Y, s, auxk2l) = kListHROS(w, math.ceil(L), R)
+	(Y, s, auxk2l) = kListHROS(w, math.ceil(L), P2)
 	print(Y)
 
 	#CONVERT ??? INTO BINARY FOR 0-k2 C's
@@ -227,11 +215,12 @@ def main():
 
 	#APPEND Y's from KLIST
 	for i in range(k2, l):
-		C.append(Y[i])
+		C.append(Y[i-k2])
 
 	#IF Klist was used CL = Yl
 	if (k2 < l):
-		Cl = Y[l]
+		Cl = Y[l-k2]
+
 
 	#RUN SIGN0 for 0-l SIGS WITH C's
 	for i in range(0, l):
@@ -247,8 +236,9 @@ def main():
 	print(((int(Sl) * G) - (int(Cl) * PubKey)) == Rl)
 
 
-	print("Rl "+str(Rl))
-	print("int(Sl) * G - int(Cl) * PubKey "+str(int(Sl) * G - int(Cl) * PubKey))
+	print("1 = "+str(Rl))
+	print("2 = "+str(Pl(R) - ))
+	print("2 = "+str(int(Sl) * G - int(Cl) * PubKey))
 
 
 print(main())
