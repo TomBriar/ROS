@@ -73,7 +73,7 @@ void println_pubkey_ge(const secp256k1_context *ctx, const secp256k1_pubkey *p) 
 void println_scalar(const secp256k1_scalar *s) {
     int n = (int) (sizeof (s->d) / sizeof (s->d[0]));
     int i;
-    printf("scalar: ");
+    // printf("scalar: ");
     for (i = n - 1; i >= 0; --i) {
         switch (sizeof(s->d[0])) {
             case 1:  printf("%02llx", (long long) s->d[i]); break;
@@ -93,8 +93,8 @@ void println_scalar(const secp256k1_scalar *s) {
 
 void printlnb(const unsigned char *msg) {
     int i;
-    printf("Print 37: ");
-    for (i = 0; i < 37; ++i) {
+    printf("Print 33: ");
+    for (i = 0; i < 33; ++i) {
         printf("%02x", msg[i]);
     }
     printf("\n");

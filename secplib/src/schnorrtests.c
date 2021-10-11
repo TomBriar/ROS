@@ -26,35 +26,11 @@ int s_get_int(secp256k1_scalar *a) {
     return secp256k1_scalar_get_bits_var(a, 0, 31);;
 }
 
-int encode(unsigned char out[37], secp256k1_gej *R, unsigned int msg) {
-    uint32_t d;
-    d = msg;
-    int odd, iter;
-    unsigned char data[32];
-    secp256k1_fe copy, copyy;
-    println_gej_ge(R);
-    copy = R->x;
-    secp256k1_fe_normalize(&copy);
-    secp256k1_fe_get_b32(data, &copy);
-    copyy = R->y;
-    secp256k1_fe_normalize(&copyy);
-    odd = secp256k1_fe_is_odd(&copyy);
-    if (odd == 0) {
-        out[0] = 0x02;
-    } else {
-        out[0] = 0x03;
-    }
-    for (iter = 1;iter < 33; iter++) {
-        out[iter] = data[iter-1];
-    }
-    for (iter = 3; iter > -1; iter--) {
-        unsigned char bit;
-        int trueiter;
-        bit = d >> (iter * 8);
-        trueiter = 33 + (3 - iter);
-        // printf("%02x", bit);
-        out[trueiter] = bit;
-    }
+int encode(unsigned char out[33], secp256k1_gej *R) {
+    secp256k1_ge Rge;
+    size_t size = sizeof(&out);
+    secp256k1_ge_set_gej(&Rge, R);
+    CHECK(secp256k1_eckey_pubkey_serialize(&Rge, out, &size, 1) == 1);
     return 1;
 }
 
@@ -218,17 +194,21 @@ static void scalar_hash(secp256k1_scalar *out, unsigned char *data, int len) {
     secp256k1_scalar_set_b32(out, out32, &overflow);
 }
 
-static void hash_point(secp256k1_scalar *out, unsigned char *data) {
+static void hash_point(secp256k1_scalar *out, unsigned char *data, unsigned int msg) {
+    uint32_t d;
     secp256k1_sha256 hash;
     int iter, overflow;
     unsigned char out32[32];
+    d = msg;
     secp256k1_sha256_initialize(&hash);
-    // printf("%u msg\n", msg);
-    // printf("data: ");
-    for (iter = 0; iter < 37; iter++) {
+    for (iter = 0; iter < 33; iter++) {
         unsigned char bit;
         bit = data[iter];
-        // printf("%02x", bit);
+        secp256k1_sha256_write(&hash, &bit, sizeof(char));
+    }
+    for (iter = 3; iter > -1; iter--) {
+        unsigned char bit;
+        bit = d >> (iter * 8);
         secp256k1_sha256_write(&hash, &bit, sizeof(char));
     }
     secp256k1_sha256_finalize(&hash, out32);
@@ -316,18 +296,12 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
         Tree[0][iter] = malloc(powerL * sizeof(klistleaf));
         Treelen[0][iter] = powerL;
         for (iter2 = 0; iter2 < powerL; iter2++) {
-            unsigned char encodeR[37];
+            unsigned char encodeR[33];
             secp256k1_scalar hashres;
             hash_value hashvalue;
             klistleaf leaf;
-            encode(encodeR, &R[iter], iter2);
-            // printf("encodeR = ");
-            // printf("%02x", encodeR[0]);
-            // printf("%02x", encodeR[37]);
-            // printf("\n");
-            hash_point(&hashres, encodeR);
-            // printf("hash = ");
-            // println_scalar(&hashres);
+            encode(encodeR, &R[iter]);
+            hash_point(&hashres, encodeR, iter2);
             hashvalue.R = R[iter];
             hashvalue.hash = hashres;
             hashvalue.aux = iter2;
@@ -337,11 +311,6 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
             leaf.hasheslen = 1;
             leaf.currenthash = hashres;
             Tree[0][iter][iter2] = leaf; 
-            // printf("\niter = %d\n", iter);
-            // printf("aux = %d\n", iter2);
-            // // println_gej_ge(&R[iter]);
-            // printf("hash = ");
-            // println_scalar(&hashres);
         }
     }
 
@@ -363,19 +332,7 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
                 treeLenMax = Treelen[x][j*2]*Treelen[x][j*2+1];
             }
             Tree[x+1][j] = malloc((treeLenMax)*sizeof(klistleaf));
-            // println_scalar(&Tree[x][j*2][0].currenthash);
-            // println_gej_ge(&Tree[x][j*2][0].hashes[0].R);
-            // println_scalar(&Tree[x][j*2][0].hashes[0].hash);
-            // printf("aux %u\n", Tree[x][j*2][0].hashes[0].aux);
-            // printf("itteration %d\n", Tree[x][j*2][0].hashes[0].iteration);
-            // unsigned char encodeR[37];
-            // secp256k1_scalar hashres;
-            // encode(encodeR, &Tree[x][j*2][0].hashes[0].R, Tree[x][j*2][0].hashes[0].aux);
-            // printlnb(&encodeR);
-            // println_scalar(&hashres);
-            // println_scalar(&Tree[x][j*2+1][0].currenthash);
             join(Tree[x+1][j], &Treelen[x+1][j], Tree[x][j*2], Tree[x][j*2+1], Treelen[x][j*2], Treelen[x][j*2+1], level);
-            printf("tree len %d\n", Tree[x+1][j]);
         }
     }
     for (iter = 0; iter < Treelen[wvar][0]; iter++) {
@@ -396,22 +353,23 @@ int klisthros(klistleaf *klistresult, secp256k1_gej *R) {
 int schnorr(secp256k1_context ctx) {
 
     /* varible initilization */
-    secp256k1_scalar privKey, k, s, *K, pll, *S, powersc, Primem1, itersc, firstTermsc, endTermsc, Sl;
+    secp256k1_scalar privKey, k, s, *K, pll, *S, powersc, Primem1, itersc, firstTermsc, endTermsc, Sl, mt;
     hash_value c0, c1, **CB, Cl, *C;
     int iter, iter2, power, bit;
     unsigned int **MB, randomint, m1, m0, Ml, *bits, *aux;
-    unsigned char encodeR[37];
-    secp256k1_gej pubKey, r, *R, *P, Rl, firstTerm, endTerm, pllG;
+    unsigned char encodeR[33];
+    secp256k1_gej pubKey, rgej, *R, *P, Rl, firstTerm, endTerm, pllG, mtgej;
+    secp256k1_ge rge;
     klistleaf klistresult;
 
     /* varible decleration */
     iter = 0;
     iter2 = 0;
     power = 0;
-    memoryLimit = 62500;
+    memoryLimit = 1024;
     sqrtMemLimit = sqrt(memoryLimit);
     lambdaParameter = 256;
-    wvar = 4;
+    wvar = 3;
     L = 5;
     k1 = pow(2, wvar);
     k1--;
@@ -423,9 +381,18 @@ int schnorr(secp256k1_context ctx) {
     printf("k1 = %d\n", k1);
     printf("k2 = %d\n", k2);
 
+
+    /* Generate mt */
+    power = ((wvar+1)*L)+1;
+    s_subtract_int(&Primem1, &Prime, 1);
+    s_set_int(&powersc, power);
+    for (s_set_int(&itersc, 0); s_comp(&itersc, &powersc, 1, 0); s_add_int_eq(&itersc, 1)) {
+        secp256k1_scalar_shr_int(&Primem1, 1);
+    }
+    mt = Primem1;
+
     /* Generate Private and Public Keys */
     randomint = secp256k1_testrand32();
-    // printf("%u\n randomint\n", randomint);
     secp256k1_scalar_set_int(&privKey, randomint);
     secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &pubKey, &privKey);
 
@@ -437,19 +404,6 @@ int schnorr(secp256k1_context ctx) {
     MB = malloc(l*sizeof(unsigned int *));
     CB = malloc(l*sizeof(secp256k1_scalar *));
 
-    // randomint = secp256k1_testrand32();
-    // secp256k1_scalar_set_int(&k, randomint);
-    // secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &r, &k);
-    // unsigned int msg = 10;
-    // encode(&encodeR, &r, msg);
-    // printf("print hex: ");
-    // for (iter = 0; iter < 37; iter++) {
-    //     printf("%02x", encodeR[iter]);
-    // }
-    // printf("\n");
-
-
-
     /* get random k's and r's */
     for (iter = 0; iter < l; iter++) {
         MB[iter] = malloc(2*sizeof(unsigned int));
@@ -457,26 +411,19 @@ int schnorr(secp256k1_context ctx) {
         randomint = secp256k1_testrand32();
         secp256k1_scalar_set_int(&k, randomint);
         K[iter] = k;
-        // printf("\niter = %d\n", iter);
-        // printf("%u,\n",randomint);
-        secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &r, &k);
-        R[iter] = r;
-        // println_gej_ge(&r);
+        secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &rgej, &k);
+        R[iter] = rgej;
         m0 = secp256k1_testrand32();
         m1 = secp256k1_testrand32();
-        encode(encodeR, &r, m0);
-        c0.R = r;
-        c1.R = r;
+        encode(encodeR, &rgej);
+        c0.R = rgej;
+        c1.R = rgej;
         c0.aux = m0;
         c0.iteration = iter;
-        hash_point(&c0.hash, encodeR);
-        // printlnb(&encodeR);
-        // printf("%d,\n",m0);
-        // println_scalar(&c0.hash);
-        encode(encodeR, &r, m1);
+        hash_point(&c0.hash, encodeR, m0);
         c1.aux = m1;
         c1.iteration = iter;
-        hash_point(&c1.hash, encodeR);
+        hash_point(&c1.hash, encodeR, m1);
         MB[iter][0] = m0;
         MB[iter][1] = m1;
         CB[iter][0] = c0;
@@ -485,38 +432,43 @@ int schnorr(secp256k1_context ctx) {
 
     /* Get pll */
     s_set_int(&pll, 0);
-    for (iter = 0; iter < l; iter++) {
-        secp256k1_scalar C1, C0, a, b, b0, b1, res;
+    for (iter = 0; iter < k2; iter++) {
+        secp256k1_scalar C1, C0, a, ab, b, p, res, binv;
         s_copy(&C0, &CB[iter][0].hash);
         s_copy(&C1, &CB[iter][1].hash);
-        s_subtract(&b1, &C1, &C0);
-        s_pow(&b0, iter);
-        s_divide(&b, &b0, &b1);
-        s_set_int(&a, 0);
-        s_subtract_eq(&a, &C0);
-        s_multiply(&res, &b, &a);
+        // s_copy(&a, &CB[iter][0].hash);
+        s_subtract(&b, &C1, &C0);
+        secp256k1_scalar_inverse(&binv, &b);
+        s_multiply(&ab, &a, &binv);
+        s_pow(&p, iter);
+        s_multiply(&res, &ab, &p);
         s_add_eq(&pll, &res);
     }
+    s_subtract_eq(&pll, &mt);
     /* no end term because we use zero*/
     printf("GENERATE RHO L\n\n\n\n\n");
     /* Get Rho L */
     /* Generate the First Term of Rho L*/
     secp256k1_gej_set_infinity(&firstTerm);
-    for (iter = 0; iter < l; iter++) {
-        secp256k1_scalar C1, C0, b, b0, b1;
-        secp256k1_gej C0ge, a, res;
+    for (iter = 0; iter < k2; iter++) {
+        secp256k1_scalar C1, C0, b, binv, p;
+        secp256k1_gej C0ge, a, res, ab;
         s_copy(&C0, &CB[iter][0].hash);
         s_copy(&C1, &CB[iter][1].hash);
         s_to_gej(ctx, &C0ge, &C0);
         gej_subtract(&a, &R[iter], &C0ge);
-        s_subtract(&b1, &C1, &C0);
-        s_pow(&b0, iter);
-        s_divide(&b, &b0, &b1);
-        gej_multiply_s(ctx, &res, &a, &b);
+        s_subtract(&b, &C1, &C0);
+        secp256k1_scalar_inverse(&binv, &b);
+        gej_multiply_s(ctx, &ab, &a, &binv);
+        s_pow(&p, iter);
+        gej_multiply_s(ctx, &res, &ab, &p);
         gej_add_eq(&firstTerm, &res);
     }
 
     /* Generate the Second Term of Rho L*/
+    s_to_gej(ctx, &mtgej, &mt);
+    
+    /* Generate the Third Term of Rho L */
     endTerm = R[k2];
     for (iter = k2+1; iter < k1+k2; iter++) {
         gej_add_eq(&endTerm, &R[iter]);
@@ -524,37 +476,44 @@ int schnorr(secp256k1_context ctx) {
 
     /* Asemble Rho L*/
     if (k2 > 0 && k1 > 0) {
+        gej_subtract_eq(&firstTerm, &mtgej);
         gej_subtract(&Rl, &firstTerm, &endTerm);
     } else if (k1 > 0) {
+        gej_subtract_eq(&endTerm, &mtgej);
         secp256k1_gej_neg(&Rl, &endTerm);
     } else {
+        gej_subtract_eq(&firstTerm, &mtgej);
         Rl = firstTerm;
     }
     gej_multiply_s(ctx, &pllG, &pubKey, &pll);
     gej_subtract_eq(&Rl, &pllG);
     R[l] = Rl;
-    println_gej_ge(&Rl);
-    for (iter = 0; iter < powerW; iter++) {
-        P[iter] = R[k2+iter];
-        println_gej_ge(&P[iter]);
-    }
+
 
     /* Assign Cl*/
     Ml = secp256k1_testrand32();
-    encode(encodeR, &Rl, Ml);
+    encode(encodeR, &Rl);
     Cl.R = Rl;
     Cl.aux = Ml;
     Cl.iteration = l+1;
-    hash_point(&Cl.hash, encodeR);
+    hash_point(&Cl.hash, encodeR, Ml);
 
-    /* Call Klist */
+    // /* Call Klist */
+
+
+    /* Grab correct R's and assign to P's to run in klist*/
+    for (iter = 0; iter < powerW; iter++) {
+        P[iter] = R[k2+iter];
+    }
+
+
 
     s_set_int(&s, 0);
     if (k1 > 0) {
-        // for (iter = 0; iter < powerW; iter++) {
-        //     printf("iter%d = ", iter);
-        //     println_gej_ge(&P[iter]);
-        // }
+        for (iter = 0; iter < powerW; iter++) {
+            printf("iter%d = ", iter);
+            println_gej_ge(&P[iter]);
+        }
 
         klisthros(&klistresult, P);
         printf("klistresult\n");
@@ -567,100 +526,109 @@ int schnorr(secp256k1_context ctx) {
         }
 
         /* Offset s */ 
-        power = (wvar+1)*L+1;
-        s_subtract_int(&Primem1, &Prime, 1);
-        s_set_int(&powersc, power);
-        for (s_set_int(&itersc, 0); s_comp(&itersc, &powersc, 1, 0); s_add_int_eq(&itersc, 1)) {
-            secp256k1_scalar_shr_int(&Primem1, 1);
-        }
-        s_add(&s, &klistresult.currenthash, &Primem1);
+        s_add(&s, &klistresult.currenthash, &mt);
     }
+    printf("s: ");
+    println_scalar(&s);
+
+
+
 
 
 
     
 
     /* Convert s to binary */
-    bits = malloc(l*sizeof(unsigned int));
+    bits = malloc(k2*sizeof(unsigned int));
     printf("binary: ");
-    for (iter = 0; iter < 256; iter++) {
+    for (iter = 0; iter < k2; iter++) {
         bit = secp256k1_scalar_get_bits(&s, iter, 1); 
         printf("%d", bit);
         bits[iter] = bit;
     }
 
-    // /* Assign correct aux and Cs */
-    // aux = malloc(l+1*sizeof(unsigned int));
-    // C = malloc(l+1*sizeof(hash_value));
-    // for (iter = 0; iter < k2; iter++) {
-    //     aux[iter] = MB[iter][bits[iter]];
-    //     C[iter] = CB[iter][bits[iter]];
-    // }
-    // if (k1 > 0) {
-    //     for (iter = 0; iter < powerW; iter++) {
-    //         aux[k2+iter] = klistresult.hashes[iter].aux;
-    //         C[k2+iter] = klistresult.hashes[iter];
-    //     }
-    // }
+    /* Assign correct aux and Cs */
+    aux = malloc(l+1*sizeof(unsigned int));
+    C = malloc(l+1*sizeof(hash_value));
+    for (iter = 0; iter < k2; iter++) {
+        aux[iter] = MB[iter][bits[iter]];
+        C[iter] = CB[iter][bits[iter]];
+    }
+    if (k1 > 0) {
+        for (iter = 0; iter < powerW; iter++) {
+            aux[k2+iter] = klistresult.hashes[iter].aux;
+            C[k2+iter] = klistresult.hashes[iter];
+        }
+    }
 
-    // /* Get l signatures */
-    // S = malloc(l*sizeof(secp256k1_scalar));
-    // for (iter = 0; iter < l; iter++) {
-    //     secp256k1_scalar result;
-    //     s_multiply(&result, &privKey, &C[iter].hash);
-    //     s_add_eq(&result, &K[iter]);
-    //     S[iter] = result;
-    // }
+    /* Get l signatures */
+    S = malloc(l*sizeof(secp256k1_scalar));
+    for (iter = 0; iter < l; iter++) {
+        secp256k1_scalar result;
+        s_multiply(&result, &privKey, &C[iter].hash);
+        s_add_eq(&result, &K[iter]);
+        S[iter] = result;
+    }
 
-    // // /* Test the l signatures */
-    // // for (iter = 0; iter < l; iter++) {
-    // //     secp256k1_gej smG, cimP, smc;
-    // //     secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &smG, &S[iter]);
-    // //     gej_multiply_s(ctx, &cimP, &pubKey, &C[iter].hash);
-    // //     gej_subtract(&smc, &smG, &cimP);
-    // //     println_gej_ge(&smc);
-    // //     println_gej_ge(&R[iter]);
-    // // }
-    // /* Generate the First Term of Sl*/
-    // s_set_int(&firstTermsc, 0);
-    // for (iter = 0; iter < k2; iter++) {
-    //     secp256k1_scalar res, C1, C0, asc, b, b0, b1;
-    //     s_copy(&C0, &CB[iter][0].hash);
-    //     s_copy(&C1, &CB[iter][1].hash);
-    //     s_subtract(&b1, &C1, &C0);
-    //     s_pow(&b0, iter);
-    //     s_divide(&b, &b0, &b1);
-    //     s_subtract(&asc, &S[iter], &C0);
-    //     s_multiply(&res, &b, &asc);
-    //     s_add_eq(&firstTermsc, &res);
-    // }
-    // // println_scalar(&firstTermsc);
+    /* Test the l signatures */
+    for (iter = 0; iter < l; iter++) {
+        secp256k1_gej smG, cimP, smc;
+        secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &smG, &S[iter]);
+        gej_multiply_s(ctx, &cimP, &pubKey, &C[iter].hash);
+        gej_subtract(&smc, &smG, &cimP);
+        println_gej_ge(&smc);
+        println_gej_ge(&R[iter]);
+    }
 
-    // /* Generate the Second Term of Sl*/
-    // s_set_int(&endTermsc, 0);
-    // for (iter = k2+1; iter < l; iter++) {
-    //     s_add_eq(&endTermsc, &S[iter]);
-    // }
-    // /* Asemble Sl*/
-    // if (k2 > 0 && k1 > 0) {
-    //     s_subtract(&Sl, &firstTermsc, &endTermsc);
-    // } else if (k1 > 0) {
-    //     secp256k1_gej_neg(&Rl, &endTerm);
-    // } else {
-    //     s_copy(&Sl, &firstTermsc);
-    // }
-    // // println_scalar(&Sl);
-    // println_scalar(&Cl.hash);
 
-    // println_scalar(&C[l].hash);
-    // {
-    //     secp256k1_gej smG, cimP, smc;
-    //     secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &smG, &Sl);
-    //     gej_multiply_s(ctx, &cimP, &pubKey, &C[l].hash);
-    //     gej_subtract(&smc, &smG, &cimP);
-    //     println_gej_ge(&smc);
-    //     println_gej_ge(&Rl);
-    // }
+
+    /* Generate the First Term of Sl*/
+    s_set_int(&firstTermsc, 0);
+    for (iter = 0; iter < k2; iter++) {
+        secp256k1_scalar C1, C0, a, ab, b, p, res, binv;
+        s_copy(&C0, &CB[iter][0].hash);
+        s_copy(&C1, &CB[iter][1].hash);
+        s_subtract(&b, &C1, &C0);
+        s_subtract(&a, &S[iter], &C0);
+        secp256k1_scalar_inverse(&binv, &b);
+        s_multiply(&ab, &a, &binv);
+        s_pow(&p, iter);
+        s_multiply(&res, &p, &ab);
+        s_add_eq(&firstTermsc, &res);
+    }
+    printf("ft");
+    println_scalar(&firstTermsc);
+
+
+    /* Generate the End Term of Sl*/
+    s_set_int(&endTermsc, 0);
+    for (iter = k2; iter < l; iter++) {
+        s_add_eq(&endTermsc, &S[iter]);
+    }
+    /* Asemble Sl */
+    if (k2 > 0 && k1 > 0) {
+        s_subtract_eq(&firstTermsc, &mt);
+        s_subtract(&Sl, &firstTermsc, &endTermsc);
+    } else if (k1 > 0) {
+        s_subtract_eq(&endTermsc, &mt);
+        secp256k1_scalar_negate(&Sl, &endTermsc);
+    } else {
+        s_subtract_eq(&firstTermsc, &mt);
+        Sl = firstTermsc;
+    }
+    printf("Sl: ");
+    println_scalar(&Sl);
+    println_scalar(&Cl.hash);
+
+    println_scalar(&C[l].hash);
+    {
+        secp256k1_gej smG, cimP, smc;
+        secp256k1_ecmult_gen(&ctx.ecmult_gen_ctx, &smG, &Sl);
+        gej_multiply_s(ctx, &cimP, &pubKey, &C[l].hash);
+        gej_subtract(&smc, &smG, &cimP);
+        println_gej_ge(&smc);
+        println_gej_ge(&Rl);
+    }
     
     return 1;
 }
